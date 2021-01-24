@@ -16,11 +16,19 @@ import (
 
 func main() {
 	fileName := ""
+	endlessmode := false
 
 	if len(os.Args) < 2 {
-		fileName = "Unnamed Recording.aiff"
+		fileName = "Unnamed Recording"
+		endlessmode = true
 	} else {
 		fileName = os.Args[1]
+	}
+
+	nRecordedFiles := 0
+
+	if endlessmode {
+		fileName = fmt.Sprint(fileName, nRecordedFiles, ".aiff")
 	}
 
 	if !strings.HasSuffix(fileName, ".aiff") {
@@ -46,6 +54,62 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, os.Kill)
 
+	f := startNewRecording(fileName)
+	nSamples := 0
+
+	portaudio.Initialize()
+
+	in := make([]int32, 64)
+	stream, err := portaudio.OpenDefaultStream(1, 0, 44100, len(in), in)
+	chk(err)
+
+	chk(stream.Start())
+
+	for {
+		select {
+		case stdin := <-ch:
+			if stdin == "q\n" {
+
+				stream.Close()
+				portaudio.Terminate()
+				CloseRecording(f, nSamples)
+
+				encode(fileName)
+				return
+			}
+		default:
+			chk(stream.Read())
+			chk(binary.Write(f, binary.BigEndian, in))
+
+			// Start: detect silence after 5 seconds of recording
+			if (nSamples / 44100) > 5 {
+				if steamIsSilent(in) {
+					CloseRecording(f, nSamples)
+					encode(fileName)
+
+					if endlessmode {
+						nRecordedFiles++
+						fileName = fmt.Sprint("Unnamed Recording", nRecordedFiles, ".aiff")
+						f = startNewRecording(fileName)
+						nSamples = 0
+					}
+				}
+			}
+			// End: Determine Volume
+
+			nSamples += len(in)
+			select {
+			case <-sig:
+				return
+			default:
+			}
+		}
+	}
+
+	chk(stream.Stop())
+}
+
+func startNewRecording(fileName string) *os.File {
 	f, err := os.Create(fileName)
 	chk(err)
 
@@ -72,68 +136,24 @@ func main() {
 	chk(binary.Write(f, binary.BigEndian, int32(0))) //size
 	chk(binary.Write(f, binary.BigEndian, int32(0))) //offset
 	chk(binary.Write(f, binary.BigEndian, int32(0))) //block
-	nSamples := 0
-	defer func() {
-		// fill in missing sizes
-		totalBytes := 4 + 8 + 18 + 8 + 8 + 4*nSamples
-		_, err = f.Seek(4, 0)
-		chk(err)
-		chk(binary.Write(f, binary.BigEndian, int32(totalBytes)))
-		_, err = f.Seek(22, 0)
-		chk(err)
-		chk(binary.Write(f, binary.BigEndian, int32(nSamples)))
-		_, err = f.Seek(42, 0)
-		chk(err)
-		chk(binary.Write(f, binary.BigEndian, int32(4*nSamples+8)))
-		chk(f.Close())
-	}()
 
-	portaudio.Initialize()
-	defer portaudio.Terminate()
-	in := make([]int32, 64)
-	stream, err := portaudio.OpenDefaultStream(1, 0, 44100, len(in), in)
+	return f
+}
+
+// CloseRecording is run when file is closed
+func CloseRecording(f *os.File, nSamples int) {
+	// fill in missing sizes
+	totalBytes := 4 + 8 + 18 + 8 + 8 + 4*nSamples
+	_, err := f.Seek(4, 0)
 	chk(err)
-	defer stream.Close()
-
-	chk(stream.Start())
-
-	for {
-		select {
-		case stdin := <-ch:
-			if stdin == "q\n" {
-
-				stream.Close()
-				portaudio.Terminate()
-
-				encode(fileName)
-				return
-			}
-		default:
-			chk(stream.Read())
-			chk(binary.Write(f, binary.BigEndian, in))
-
-			// Start: detect silence after 5 seconds
-			if (nSamples / 44100) > 5 {
-				if steamIsSilent(in) {
-					stream.Close()
-					portaudio.Terminate()
-
-					encode(fileName)
-					return
-				}
-			}
-			// End: Determine Volume
-
-			nSamples += len(in)
-			select {
-			case <-sig:
-				return
-			default:
-			}
-		}
-	}
-
-	chk(stream.Stop())
+	chk(binary.Write(f, binary.BigEndian, int32(totalBytes)))
+	_, err = f.Seek(22, 0)
+	chk(err)
+	chk(binary.Write(f, binary.BigEndian, int32(nSamples)))
+	_, err = f.Seek(42, 0)
+	chk(err)
+	chk(binary.Write(f, binary.BigEndian, int32(4*nSamples+8)))
+	chk(f.Close())
 }
 
 func steamIsSilent(in []int32) bool {
@@ -148,14 +168,20 @@ func steamIsSilent(in []int32) bool {
 }
 
 func encode(fileName string) {
-	fmt.Println("Encoding")
+	artist := "Unknown Artist"
+	title := "Unknown Title"
 
-	spl := strings.Split(strings.Replace(fileName, ".aiff", "", 1), " - ")
+	if strings.Index(fileName, " - ") > 1 {
+		spl := strings.Split(strings.Replace(fileName, ".aiff", "", 1), " - ")
+		if len(spl) > 1 {
+			artist = spl[0]
+			title = spl[1]
+		}
+	}
 
-	fmt.Println(spl[0])
-	fmt.Println(spl[1])
+	fmt.Println("[Encoding] ", artist, title)
 
-	_, err := exec.Command("lame", fileName, "-b 192", "--ta", ``+spl[0], "--tt", ``+spl[1]).Output()
+	_, err := exec.Command("lame", fileName, "-b 192", "--ta", ``+artist, "--tt", ``+title).Output()
 	if err != nil {
 		log.Fatal(err)
 	}
