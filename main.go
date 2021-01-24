@@ -17,6 +17,7 @@ import (
 func main() {
 	fileName := ""
 	endlessmode := false
+	silenceCount := 0
 
 	if len(os.Args) < 2 {
 		fileName = "Unnamed Recording"
@@ -84,6 +85,12 @@ func main() {
 			// Start: detect silence after 5 seconds of recording
 			if (nSamples / 44100) > 5 {
 				if steamIsSilent(in) {
+					// Stop recording after detecting silence twice
+					if silenceCount > 0 {
+						endlessmode = false
+					}
+					silenceCount++
+
 					CloseRecording(f, nSamples)
 					encode(fileName)
 
@@ -92,7 +99,11 @@ func main() {
 						fileName = fmt.Sprint("Unnamed Recording", nRecordedFiles, ".aiff")
 						f = startNewRecording(fileName)
 						nSamples = 0
+					} else {
+						return
 					}
+				} else {
+					silenceCount = 0
 				}
 			}
 			// End: Determine Volume
