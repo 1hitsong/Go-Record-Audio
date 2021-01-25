@@ -110,20 +110,28 @@ func main() {
 					// Stop recording after detecting silence twice
 					if silenceCount > 0 {
 						endlessmode = false
+						CloseRecording(f, nSamples)
+
+						e := os.Remove(fileName)
+						if e != nil {
+							log.Fatal(e)
+						}
+						return
 					}
-					silenceCount++
 
 					CloseRecording(f, nSamples)
 					encode(fileName)
 
-					if endlessmode {
-						nRecordedFiles++
-						fileName = fmt.Sprint("Unnamed Recording", nRecordedFiles, ".aiff")
-						f = startNewRecording(fileName)
-						nSamples = 0
-					} else {
+					if !endlessmode {
 						return
 					}
+
+					silenceCount++
+					nRecordedFiles++
+					fileName = fmt.Sprint("Unnamed Recording", nRecordedFiles, ".aiff")
+					f = startNewRecording(fileName)
+					nSamples = 0
+
 				} else {
 					silenceCount = 0
 				}
