@@ -12,9 +12,31 @@ import (
 	"strings"
 
 	"github.com/gordonklaus/portaudio"
+	"github.com/ilyakaznacheev/cleanenv"
 )
 
+// Config is a application configuration structure
+type Config struct {
+	SilenceDetection struct {
+		Delayatstartofcapture int `yaml:"delayatstartofcapture" env:"SilenceDelay" env-description:"Seconds to wait at start of capture before listening for silence" env-default:"5"`
+	} `yaml:"silencedetection"`
+	Encode struct {
+		Bitrate       string `yaml:"bitrate" env:"BitRate" env-description:"Bitrate to encode the resulting MP3 at"`
+		DefaultArtist string `yaml:"defaultartist" env:"DefaultArtist" env-description:"Default value to use if Artist is not specified"`
+		DefaultTitle  string `yaml:"defaulttitle" env:"DefaultTitle" env-description:"Default value to use if Title is not specified"`
+	} `yaml:"encode"`
+}
+
+var cfg Config
+
 func main() {
+
+	// read configuration from the file and environment variables
+	if err := cleanenv.ReadConfig("config.yml", &cfg); err != nil {
+		fmt.Println(err)
+		os.Exit(2)
+	}
+
 	fileName := ""
 	endlessmode := false
 	silenceCount := 0
@@ -83,7 +105,7 @@ func main() {
 			chk(binary.Write(f, binary.BigEndian, in))
 
 			// Start: detect silence after 5 seconds of recording
-			if (nSamples / 44100) > 5 {
+			if (nSamples / 44100) > cfg.SilenceDetection.Delayatstartofcapture {
 				if steamIsSilent(in) {
 					// Stop recording after detecting silence twice
 					if silenceCount > 0 {
@@ -179,8 +201,8 @@ func steamIsSilent(in []int32) bool {
 }
 
 func encode(fileName string) {
-	artist := "Unknown Artist"
-	title := "Unknown Title"
+	artist := cfg.Encode.DefaultArtist
+	title := cfg.Encode.DefaultTitle
 
 	if strings.Index(fileName, " - ") > 1 {
 		spl := strings.Split(strings.Replace(fileName, ".aiff", "", 1), " - ")
@@ -192,7 +214,7 @@ func encode(fileName string) {
 
 	fmt.Println("[Encoding] ", artist, title)
 
-	_, err := exec.Command("lame", fileName, "-b 192", "--ta", ``+artist, "--tt", ``+title).Output()
+	_, err := exec.Command("lame", fileName, "-b", ``+cfg.Encode.Bitrate, "--ta", ``+artist, "--tt", ``+title).Output()
 	if err != nil {
 		log.Fatal(err)
 	}

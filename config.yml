@@ -1,0 +1,7 @@
+silencedetection:
+  delayatstartofcapture: 5
+
+encode:
+  defaultartist: Unknown Artist
+  defaulttitle: Unknown Title
+  bitrate: 192
