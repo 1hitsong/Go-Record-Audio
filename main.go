@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math"
 	"os"
@@ -48,7 +49,7 @@ func main() {
 		fileName = os.Args[1]
 	}
 
-	nRecordedFiles := 0
+	nRecordedFiles := numRecordedFiles()
 
 	if endlessmode {
 		fileName = fmt.Sprint(fileName, nRecordedFiles, ".aiff")
@@ -57,6 +58,8 @@ func main() {
 	if !strings.HasSuffix(fileName, ".aiff") {
 		fileName += ".aiff"
 	}
+
+	fileName = "recordings/" + fileName
 
 	fmt.Println("Recording.  Press q to stop.")
 
@@ -131,7 +134,7 @@ func main() {
 
 					silenceCount++
 					nRecordedFiles++
-					fileName = fmt.Sprint("Unnamed Recording", nRecordedFiles, ".aiff")
+					fileName = fmt.Sprint("recordings/Unnamed Recording", nRecordedFiles, ".aiff")
 					f = startNewRecording(fileName)
 					nSamples = 0
 
@@ -234,6 +237,11 @@ func encode(fileName string) {
 	if e != nil {
 		log.Fatal(e)
 	}
+}
+
+func numRecordedFiles() int {
+	files, _ := ioutil.ReadDir("recordings/")
+	return len(files)
 }
 
 func chk(err error) {
