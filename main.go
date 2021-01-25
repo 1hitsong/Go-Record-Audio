@@ -99,7 +99,10 @@ func main() {
 
 				encode(fileName)
 				return
+			} else if stdin == "s\n" {
+				endlessmode = false
 			}
+
 		default:
 			chk(stream.Read())
 			chk(binary.Write(f, binary.BigEndian, in))
